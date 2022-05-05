@@ -1,64 +1,54 @@
-# dockerd-exporter
+# dockerd-exporter: Prometheus exporter for Docker daemon metrics
 
-[![Docker Image](https://images.microbadger.com/badges/image/stefanprodan/dockerd-exporter.svg)](https://hub.docker.com/r/stefanprodan/dockerd-exporter/)
+This container relays TCP connections to the Docker daemon's metrics endpoint via the `docker_gwbridge` bridge network.
 
-Prometheus Docker daemon metrics exporter
+As a result, these metrics can be scraped via Prometheus instances deployed to the same overlay network.
 
-### Docker Engine 
+## Docker Engine
 
-Create or edit /etc/systemd/system/docker.service.d/docker.conf, 
-enable the experimental feature and set the metrics address to 0.0.0.0:
+Create or edit `/etc/docker/daemon.json` to enable the experimental features and configure the metrics address:
 
-```
-[Service]
-ExecStart=
-ExecStart=/usr/bin/dockerd -H fd:// \
-  --storage-driver=overlay2 \
-  --dns 8.8.4.4 --dns 8.8.8.8 \
-  --log-driver json-file \
-  --log-opt max-size=50m --log-opt max-file=10 \
-  --experimental=true \
-  --metrics-addr 0.0.0.0:9323
-```
+~~~
+{
+  "metrics-addr": "0.0.0.0:9323",
+  "experimental": true
+}
+~~~
 
-Check if the docker_gwbridge ip address is `172.18.0.1`:
+Restart the Docker service afterwards. Do the same for each node in your Docker Swarm cluster.
 
-```bash
- docker run --rm --net host alpine ip -o addr show docker_gwbridge
-```
-
-### Docker Swarm 
+## Docker Swarm
 
 Create an overlay network:
 
-```sh
-docker network create \
-  --driver overlay \
-  netmon
-```
+~~~sh
+docker network create --driver overlay example-net
+~~~
 
-Create dockerd-exporter global service (replace 172.18.0.1 with your docker_gwbridge address):
+Create a global service:
 
-```sh
-docker service create -d \
+~~~sh
+docker service create \
+  --detach \
   --mode global \
   --name dockerd-exporter \
-  --network netmon \
-  -e IN="172.18.0.1:9323" \
-  -e OUT="9323" \
-  stefanprodan/dockerd-exporter:latest
-```
+  --network example-net \
+  dockerd-exporter:latest
+~~~
 
-Configure Prometheus to scrape the dockerd-exporter instances:
+Configure Prometheus to scrape the _dockerd-exporter_ instances:
 
-```
+~~~
 scrape_configs:
-- job_name: 'dockerd-exporter'
-  dns_sd_configs:
-  - names:
-    - 'tasks.dockerd-exporter'
-    type: 'A'
-    port: 9323
-```
+  - job_name: "dockerd-exporter"
+    dns_sd_configs:
+      - names:
+          - "tasks.dockerd-exporter"
+        type: "A"
+~~~
 
-Run Prometheus on the same overlay network as dockerd-exporter.
+Run Prometheus on the same overlay network as _dockerd-exporter_.
+
+## Troubleshooting
+
+You may need to open `9323/tcp` in each node's firewall.

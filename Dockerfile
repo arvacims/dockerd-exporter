@@ -1,8 +1,10 @@
-FROM alpine:latest
+FROM alpine:3.15
 
-RUN apk add --no-cache socat 
+RUN apk add --no-cache socat
 
-ENV IN="172.18.0.1:9323" \
-    OUT="9323"
+ENV DOCKERD_METRICS_PORT="9323"
 
-ENTRYPOINT socat -d -d TCP-L:$OUT,fork TCP:$IN
+COPY relay.sh /opt/dockerd-exporter/relay.sh
+WORKDIR /opt/dockerd-exporter
+
+CMD ./relay.sh
